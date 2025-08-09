@@ -1,0 +1,1 @@
+{"version":3,"file":"trigger-generator.d.ts","sourceRoot":"","sources":["trigger-generator.ts"],"names":[],"mappings":"AAAA,qBAAa,gBAAgB;IAC3B,MAAM,CAAC,gBAAgB,CAAC,SAAS,EAAE,MAAM,GAAG,MAAM;IAyClD,MAAM,CAAC,oBAAoB,CAAC,SAAS,EAAE,MAAM,GAAG,MAAM;IAStD,MAAM,CAAC,qBAAqB,CAAC,SAAS,EAAE,MAAM,GAAG,MAAM;CAcxD"}

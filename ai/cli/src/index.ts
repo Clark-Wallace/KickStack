@@ -14,6 +14,9 @@ import { generateTokenCommand } from './commands/generate-token';
 import { demoCommand } from './commands/demo';
 import templateCommand from './commands/template';
 import { seedCommand, validateSeedType, seedTypes } from './commands/seed';
+import { registerNewCommand } from './commands/new';
+import { registerEvolveCommand } from './commands/evolve';
+import { reloadSchemaCommand } from './commands/reload-schema';
 import { ErrorHandler } from './lib/error-handler';
 import chalk from 'chalk';
 import * as dotenv from 'dotenv';
@@ -37,6 +40,10 @@ program
   .name('kickstack')
   .description('KickStack AI-powered CLI - "Just Kick it"')
   .version('1.0.0');
+
+// Register new AI-powered commands
+registerNewCommand(program);
+registerEvolveCommand(program);
 
 program
   .command('add-table <description>')
@@ -262,6 +269,18 @@ program
       await seedCommand(options);
     } catch (error) {
       ErrorHandler.handleError(error as Error, { command: 'seed', options });
+    }
+  });
+
+program
+  .command('reload-schema')
+  .description('Reload PostgREST schema cache after database changes')
+  .action(async () => {
+    try {
+      await reloadSchemaCommand();
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
     }
   });
 

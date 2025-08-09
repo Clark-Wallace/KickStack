@@ -4,6 +4,7 @@ export interface Column {
   pk?: boolean;
   nullable?: boolean;
   default?: string;
+  unique?: boolean;
   ref?: string;
 }
 
@@ -69,7 +70,7 @@ export interface ApplyResult {
   success: boolean;
   appliedMigrations: string[];
   createdFunctions: string[];
-  errors?: string[];
+  errors: string[];
 }
 
 export interface VerifyResult {

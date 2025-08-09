@@ -23,15 +23,15 @@ export async function genCommand(
     // Render the plan to artifacts
     const rendered = await orchestrator.renderPlan(plan);
     
-    // Stage the artifacts (don't apply yet)
-    await orchestrator.stageArtifacts(rendered);
-    
     // Save the plan
     const planName = options.name || 'generated';
-    const planPath = await orchestrator.savePlan(plan, planName);
+    const planPath = `${planName}.yaml`;
+    orchestrator.savePlan(plan, planPath);
     
     // Print summary
-    orchestrator.printSummary(plan, rendered);
+    console.log(chalk.cyan('\n📋 Plan Summary:'));
+    console.log(chalk.white(`   Tables: ${rendered.migrations.length}`));
+    console.log(chalk.white(`   Functions: ${rendered.functions.length}`));
     
     console.log(chalk.white('\n💾 Plan saved to:'));
     console.log(chalk.cyan(`  ${planPath}`));
@@ -42,7 +42,7 @@ export async function genCommand(
     
     console.log(chalk.white('\n🚀 Next steps:'));
     console.log(chalk.gray('  1. Review the plan and staged artifacts'));
-    console.log(chalk.gray(`  2. Apply with: kickstack apply --file ${path.basename(planPath)}`));
+    console.log(chalk.gray(`  2. Apply with: kickstack apply --file ${planPath}`));
     console.log(chalk.gray('  3. Or apply directly: kickstack apply --file --no-verify (skip verification)'));
     
     console.log(chalk.green('\n✅ Generation complete! No changes applied yet.'));

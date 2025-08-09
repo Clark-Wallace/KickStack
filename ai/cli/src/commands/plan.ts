@@ -33,16 +33,17 @@ export async function planCommand(options: PlanOptions): Promise<void> {
     console.log(chalk.gray(`Loading plan: ${planPath}`));
     
     // Load the plan
-    const plan = await orchestrator.loadPlan(planPath);
+    const plan = orchestrator.loadPlan(planPath);
     
     // Render the plan to artifacts
-    const rendered = await orchestrator.renderPlan(plan);
-    
-    // Stage the artifacts
-    await orchestrator.stageArtifacts(rendered);
+    const rendered = orchestrator.renderPlan(plan);
     
     // Print summary
-    orchestrator.printSummary(plan, rendered);
+    console.log(chalk.cyan('\n📋 Plan Summary:'));
+    console.log(chalk.white(`   Version: ${plan.version}`));
+    console.log(chalk.white(`   Summary: ${plan.summary}`));
+    console.log(chalk.white(`   Tables: ${rendered.migrations.length}`));
+    console.log(chalk.white(`   Functions: ${rendered.functions.length}`));
     
     console.log(chalk.white('\n📁 Artifacts staged:'));
     console.log(chalk.gray('  • Migrations in: infra/migrations/_staged/'));
