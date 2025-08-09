@@ -160,7 +160,7 @@ export class VerifyService {
           
           if (readResponse.ok) {
             const data = await readResponse.json();
-            const hasBData = data.some((row: any) => row[step.policy!.owner_col] === userB);
+            const hasBData = (data as any[]).some((row: any) => row[step.policy!.owner_col] === userB);
             
             if (!hasBData) {
               result.passed.push(`${tableName}: owner isolation working`);
@@ -196,7 +196,7 @@ export class VerifyService {
         
         if (response.ok) {
           const data = await response.json();
-          if (data.ok) {
+          if ((data as any).ok) {
             result.passed.push(`Function ${funcName}: smoke test passed`);
           } else {
             result.failed.push(`Function ${funcName}: returned error`);
@@ -215,7 +215,7 @@ export class VerifyService {
     
     for (const check of checks) {
       try {
-        const headers: HeadersInit = {
+        const headers: Record<string, string> = {
           'Content-Type': 'application/json'
         };
         

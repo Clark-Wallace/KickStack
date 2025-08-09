@@ -3,8 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import chalk from 'chalk';
-import { OllamaAdapter } from '../../cli/src/adapters/ollama';
-import { OpenAIAdapter } from '../../cli/src/adapters/openai';
+import { OllamaAdapter } from '../../cli/src/adapters/ollama-adapter';
+import { OpenAIAdapter } from '../../cli/src/adapters/openai-adapter';
 import { TemplateManager } from '../../cli/src/lib/template-manager';
 
 export class Orchestrator {
@@ -530,7 +530,7 @@ CREATE TRIGGER ${name}_trigger
       }));
       
     } catch (error) {
-      console.warn('Could not fetch template suggestions:', error.message);
+      console.warn('Could not fetch template suggestions:', (error as Error).message);
       return [];
     }
   }

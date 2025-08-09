@@ -1,56 +1,184 @@
 # KickStack
 
+[![CI](https://github.com/Clark-Wallace/KickStack/actions/workflows/kickstack-ci.yml/badge.svg)](https://github.com/Clark-Wallace/KickStack/actions/workflows/kickstack-ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 **"Just Kick it"** - A local-first, AI-powered backend platform.
+
+## 🚀 Demo Showcase
+
+See KickStack in action with ready-made apps you can run locally or deploy in minutes.
+
+### Available Demos
+
+#### 📝 Blog Platform
+Full-featured blogging with public posts, private comments, and realtime updates.
+- Public read posts with author-only editing
+- Comment system with owner permissions
+- Email notifications and view tracking
+- Realtime WebSocket updates
+
+```bash
+npm run kickstack demo up blog --with-seed
+```
+
+#### 🛒 E-commerce Store
+Complete online store with products, orders, and payment processing.
+- Public product catalog with inventory
+- Multi-vendor support with team scope
+- Shopping cart and order management
+- Payment webhook integration
+
+```bash
+npm run kickstack demo up ecommerce --with-seed
+```
+
+#### 💼 Multi-Tenant CRM
+Enterprise CRM with organization isolation and admin controls.
+- Contact and lead management
+- Deal pipeline tracking
+- Admin override for support
+- API keys for integrations
+
+```bash
+npm run kickstack demo up crm --with-seed
+```
+
+### Quick Demo Commands
+
+#### CLI Installation
+```bash
+# List all available demos
+npm run kickstack demo list
+
+# Install a demo locally
+npm run kickstack demo up <demo-name>
+
+# Deploy demo to cloud
+npm run kickstack demo deploy <demo-name>
+```
+
+#### Dashboard Installation
+Visit **Dashboard → Demos** to install demos through the UI:
+1. Start the dashboard: `npm run web:dev`
+2. Navigate to http://localhost:3001/demos
+3. Browse available demos with search and filters
+4. Click any demo to view details and README
+5. Choose **Install** with options:
+   - **Apply Now** or **Stage Only**
+   - **Include Sample Data** checkbox
+6. After installation, use quick-links to:
+   - Open tables in Table Explorer
+   - Run verification tests
+   - View API endpoints
+
+[View Demo Documentation →](./demos/)
 
 ## Quick Start
 
+### 🚀 One-Command Setup
+```bash
+# Clone, setup, and start everything with validation
+git clone https://github.com/Clark-Wallace/KickStack.git
+cd KickStack
+./scripts/quick-start.sh
+```
+
+This will:
+- ✅ Check Docker and dependencies
+- ✅ Start all services
+- ✅ Build the CLI
+- ✅ Validate setup
+- ✅ Seed demo data (optional)
+- ✅ Show service URLs and next steps
+
 ### Prerequisites
 - Docker and Docker Compose installed
-- Node.js 16+ and npm installed
-- Port availability: 3000, 3001, 5432, 8081, 9000, 9001, 9999, 8025
+- Node.js 20 LTS and npm installed
+- Port availability: 3050 (API), 3001 (Dashboard), 5432 (PostgreSQL), and others
 - For AI features, one of:
   - Ollama installed and running (https://ollama.ai)
   - OpenAI API key set as `OPENAI_API_KEY` environment variable
 
+### ⚠️ Security Warning
+
+**IMPORTANT:** Before deploying to production:
+- Change all default passwords in `/infra/.env`
+- Generate a secure `JWT_SECRET`
+- Update MinIO access credentials
+- Review the security configuration in `CONTRIBUTING.md`
+
 ### Setup Instructions
 
-1. **Install dependencies:**
+1. **Clone and install:**
    ```bash
-   cd kickstack
+   git clone https://github.com/Clark-Wallace/KickStack.git
+   cd KickStack
    npm run cli:install
    npm run web:install
    ```
 
-2. **Start the infrastructure stack:**
+2. **Configure environment (first time only):**
+   ```bash
+   cp infra/.env.example infra/.env
+   # Edit infra/.env to change default passwords
+   ```
+
+3. **Start the infrastructure stack:**
    ```bash
    cd infra
    docker-compose up -d
    ```
 
-3. **Verify all services are running:**
+4. **Verify setup and troubleshoot:**
    ```bash
-   docker-compose ps
+   # Comprehensive validation
+   ./scripts/validate-setup.sh
+   
+   # Debug services if needed
+   ./scripts/debug-services.sh
+   
+   # Reload PostgREST after schema changes
+   ./scripts/reload-postgrest.sh
    ```
 
-4. **Start the web dashboard (optional):**
+5. **Seed demo data (optional):**
    ```bash
-   cd kickstack
+   # Seed all demo data
+   ./scripts/seed-demo-data.sh --type all
+   
+   # Or use the CLI
+   npm run kickstack seed --type all
+   ```
+
+6. **Start the web dashboard (optional):**
+   ```bash
    npm run web:dev
    ```
    Then open http://localhost:3001 in your browser.
 
+### Deploy to Fly.io
+
+For production deployment:
+```bash
+npm run kickstack deploy fly --profile cloud
+```
+
+See the [deployment guide](docs/deployment.md) for detailed instructions.
+
 ### Service Access Points
 
-| Service | Purpose | Local URL | Credentials |
-|---------|---------|-----------|-------------|
-| **Web Dashboard** | KickStack UI | http://localhost:3001 | Use GoTrue auth |
-| **PostgREST API** | REST API from database | http://localhost:3000 | JWT required |
-| **PostgreSQL** | Primary database | localhost:5432 | kick / kickpass |
-| **Realtime WS** | WebSocket service | ws://localhost:8081 | - |
-| **GoTrue Auth** | Authentication service | http://localhost:9999 | - |
-| **MinIO Console** | Object storage UI | http://localhost:9001 | admin / changeme123 |
-| **MinIO S3 API** | S3-compatible API | http://localhost:9000 | admin / changeme123 |
-| **MailHog** | Email testing UI | http://localhost:8025 | - |
+| Service | Purpose | Local URL | Cloud Route | Default Credentials |
+|---------|---------|-----------|-------------|---------------------|
+| **Web Dashboard** | KickStack UI | http://localhost:3001 | `/` | Use GoTrue auth |
+| **PostgREST API** | REST API | http://localhost:3050 | `/api/*` | JWT required |
+| **Functions Gateway** | Edge functions | http://localhost:8787 | `/fn/*` | JWT optional |
+| **GoTrue Auth** | Authentication | http://localhost:9999 | `/auth/*` | - |
+| **Realtime WS** | WebSocket service | ws://localhost:8081 | `/realtime` | - |
+| **PostgreSQL** | Primary database | localhost:5432 | - | See .env |
+| **MinIO Console** | Object storage UI | http://localhost:9001 | - | See .env |
+| **MinIO S3 API** | S3-compatible API | http://localhost:9000 | `/storage/*` | See .env |
+| **MailHog** | Email testing UI | http://localhost:8025 | - | - |
 
 ### API Endpoints
 
@@ -61,9 +189,9 @@
 - **User Info:** `GET http://localhost:9999/user` (requires auth token)
 
 #### Database API (PostgREST)
-- **Projects:** `http://localhost:3000/projects`
-- **Tasks:** `http://localhost:3000/tasks`
-- **Files:** `http://localhost:3000/files`
+- **Projects:** `http://localhost:3050/projects`
+- **Tasks:** `http://localhost:3050/tasks`
+- **Files:** `http://localhost:3050/files`
 
 ### Example Usage
 
@@ -89,13 +217,13 @@ curl -X POST http://localhost:9999/token?grant_type=password \
 
 #### 3. Access PostgREST API with JWT:
 ```bash
-curl http://localhost:3000/projects \
+curl http://localhost:3050/projects \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 #### 4. Access MinIO Console:
 1. Open http://localhost:9001 in your browser
-2. Login with: admin / changeme123
+2. Login with credentials from your `.env` file
 3. Create buckets and manage files through the UI
 
 ### Stopping the Stack
@@ -128,16 +256,6 @@ KickStack uses **PostgreSQL 16** as its primary database, enabling:
 - **UUID** primary keys for distributed systems
 - **Trigger-based** change capture for realtime updates
 
-#### Migration from SQLite
-
-If you have existing SQLite data from an earlier version:
-
-```bash
-cd infra
-./scripts/sqlite_to_pg.sh
-```
-
-This script will automatically migrate your data to PostgreSQL.
 
 ### Project Structure
 
@@ -158,14 +276,50 @@ kickstack/
 
 ### Troubleshooting
 
-1. **Port conflicts:** Ensure ports 3000, 9000, 9001, 9999, 8025 are not in use
-2. **Database connection issues:** Check SQLite volume is properly mounted
-3. **Auth issues:** Verify JWT_SECRET matches in both PostgREST and GoTrue
-4. **Email testing:** Check MailHog UI at http://localhost:8025 for sent emails
+#### 🔧 Diagnostic Tools
+```bash
+# Comprehensive setup validation
+./scripts/validate-setup.sh
+
+# Debug service issues
+./scripts/debug-services.sh
+
+# Reload PostgREST after schema changes
+./scripts/reload-postgrest.sh
+
+# View service logs
+docker-compose logs [service-name]
+```
+
+#### Common Issues & Fixes
+
+1. **Port conflicts:** 
+   - Default PostgREST port changed to 3050 (was 3000)
+   - All ports configurable in `infra/.env`
+   - Check with: `lsof -i :PORT_NUMBER`
+
+2. **Database connection issues:** 
+   - Run validation: `./scripts/validate-setup.sh`
+   - Check PostgreSQL: `docker-compose ps postgres`
+   - Test connection: `docker-compose exec postgres pg_isready`
+
+3. **Tables not accessible via API:**
+   - Auto-permissions now enabled for new tables
+   - Reload PostgREST: `./scripts/reload-postgrest.sh`
+   - Check permissions: `curl http://localhost:3050/`
+
+4. **Auth issues:** 
+   - GoTrue may need configuration fixes
+   - Verify JWT_SECRET matches in `.env`
+   - Check logs: `docker-compose logs gotrue`
+
+5. **Email testing:** 
+   - MailHog UI: http://localhost:8025
+   - All emails captured locally (no actual sending)
 
 ### Development Notes
 
-- SQLite database persists in Docker volume `sqlite-data`
+- PostgreSQL database persists in Docker volume `postgres-data`
 - MinIO data persists in Docker volume `minio-data`
 - All emails in development are captured by MailHog (no actual sending)
 - CORS is enabled for all origins in development mode
@@ -219,7 +373,9 @@ npm run kickstack add-table "orders with customer_name, total_amount, status, or
    - Indexes for performance
 3. **Migration Creation:** SQL is saved to `infra/migrations/` with timestamp
 4. **Database Update:** Migration is applied via psql to PostgreSQL
-5. **API Ready:** Table is immediately available via PostgREST API with RLS support
+5. **Automatic Permissions:** Tables automatically get API access permissions
+6. **Schema Reload:** PostgREST automatically picks up new tables
+7. **API Ready:** Table is immediately available via PostgREST API with RLS support
 
 ### Example Workflow
 
@@ -231,16 +387,16 @@ npm run kickstack add-table "customers with full_name, email, phone, address, ci
 # ✓ Table created: customers
 # ✓ Migration saved: infra/migrations/20240109_1430_add_table_customers.sql
 # ✓ API endpoints ready:
-#   GET    http://localhost:3000/customers
-#   POST   http://localhost:3000/customers
-#   PATCH  http://localhost:3000/customers?id=eq.1
-#   DELETE http://localhost:3000/customers?id=eq.1
+#   GET    http://localhost:3050/customers
+#   POST   http://localhost:3050/customers
+#   PATCH  http://localhost:3050/customers?id=eq.1
+#   DELETE http://localhost:3050/customers?id=eq.1
 
 # Test the new API
-curl http://localhost:3000/customers
+curl http://localhost:3050/customers
 
 # Insert data
-curl -X POST http://localhost:3000/customers \
+curl -X POST http://localhost:3050/customers \
   -H "Content-Type: application/json" \
   -d '{
     "full_name": "John Doe",
@@ -260,14 +416,46 @@ curl -X POST http://localhost:3000/customers \
 
 2. **"Table already exists" error:**
    - Table names must be unique
-   - Check existing tables: `curl http://localhost:3000/`
+   - Check existing tables: `curl http://localhost:3050/`
 
 3. **PostgREST not detecting new tables:**
    - Restart PostgREST: `docker-compose -f infra/docker-compose.yml restart postgrest`
 
 4. **Database connection errors:**
    - Ensure Docker stack is running: `cd infra && docker-compose ps`
-   - Check SQLite volume is mounted properly
+   - Check PostgreSQL container is running: `docker-compose ps postgres`
+
+## 🆕 Recent Improvements
+
+### Infrastructure Enhancements
+- **🔧 Automatic Permissions:** New tables automatically get API access permissions via event triggers
+- **🔄 Schema Auto-Reload:** PostgREST automatically picks up schema changes without manual restart
+- **🎯 Port Configuration:** All service ports now configurable via environment variables (PostgREST now defaults to 3050)
+- **✅ Setup Validation:** Comprehensive validation script checks Docker, services, ports, and configuration
+- **🐛 Service Diagnostics:** Debug script provides detailed health checks and troubleshooting
+- **📊 Demo Data Seeding:** Rich sample data system for testing (organizations, users, projects, blog, chat)
+
+### Developer Experience
+- **🚀 Quick Start Script:** One-command setup with `./scripts/quick-start.sh`
+- **📝 Better Error Handling:** Categorized errors with specific fix suggestions
+- **🔍 Enhanced CLI:** Fixed TypeScript compilation issues and improved error messages
+- **🌱 Data Seeding Command:** `npm run kickstack seed` for easy demo data population
+- **♻️ PostgREST Reload:** `./scripts/reload-postgrest.sh` for instant schema updates
+
+### CLI Commands
+```bash
+# New seeding command
+npm run kickstack seed --type all
+
+# Quick validation
+./scripts/validate-setup.sh
+
+# Debug services
+./scripts/debug-services.sh
+
+# Reload schema
+./scripts/reload-postgrest.sh
+```
 
 ## Web Dashboard (v0)
 
@@ -277,6 +465,8 @@ KickStack includes a minimal web dashboard for managing your data and monitoring
 
 - **Authentication:** Login/logout using GoTrue (email/password)
 - **Table Explorer:** Browse, add, and delete rows in any table
+- **Demo Showcase:** Install and manage demo applications through the UI
+- **Template Browser:** Search and install community templates
 - **Status Panel:** Monitor service health (API, Auth, MinIO)
 - **Quick Links:** Access all services from one place
 
@@ -330,7 +520,7 @@ KickStack includes a minimal web dashboard for managing your data and monitoring
 
 3. **Table not loading:**
    - Verify you're logged in (token stored in localStorage)
-   - Check the table exists: `curl http://localhost:3000/<table_name>`
+   - Check the table exists: `curl http://localhost:3050/<table_name>`
    - Restart PostgREST if you just created the table
 
 4. **Status shows services offline:**
@@ -359,7 +549,7 @@ KickStack supports realtime data synchronization through WebSocket broadcasting.
 1. **Apply the changes table migration:**
    ```bash
    cd infra
-   sqlite3 data/kickstack.db < migrations/00000000_0000_kickstack_changes.sql
+   docker-compose exec postgres psql -U kick -d kickstack -f /migrations/00000000_0000_kickstack_changes.sql
    ```
 
 2. **Start the realtime service:**
@@ -397,7 +587,7 @@ KickStack supports realtime data synchronization through WebSocket broadcasting.
 3. **Test live updates in another terminal:**
    ```bash
    # Insert a new record
-   curl -X POST http://localhost:3000/contacts \
+   curl -X POST http://localhost:3050/contacts \
      -H "Content-Type: application/json" \
      -d '{"name": "Jane Doe", "email": "jane@example.com"}'
    
@@ -531,13 +721,13 @@ TOKEN=$(curl -X POST http://localhost:9999/token?grant_type=password \
   | jq -r '.access_token')
 
 # 4. Create a task (automatically owned by you)
-curl -X POST http://localhost:3000/tasks \
+curl -X POST http://localhost:3050/tasks \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title": "My secure task", "completed": false}'
 
 # 5. Only you can see your tasks
-curl http://localhost:3000/tasks \
+curl http://localhost:3050/tasks \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -568,77 +758,141 @@ The integration tests verify:
 - Anonymous users are blocked
 - JWT claims are properly validated
 
+### Public Read Policy Preset
+
+The "public_read" preset allows anyone to read data, but only owners can modify:
+
+```bash
+npm run kickstack add-policy public_read blog_posts --owner-col author_id
+```
+
+This creates:
+- **select_public** - Anyone can read all rows (including anonymous users)
+- **insert_own** - Only authenticated users can insert (as owners)
+- **update_own** - Users can only update their own rows
+- **delete_own** - Users can only delete their own rows
+
+### Multi-Tenancy with Team Scope
+
+The "team_scope" preset provides organization-based data isolation:
+
+```bash
+# Apply team scope to a table
+npm run kickstack add-policy team_scope projects --org-col org_id --owner-col created_by
+
+# Or add org column if it doesn't exist
+npm run kickstack add-policy team_scope documents --add-org-col
+```
+
+#### How Team Scope Works
+
+1. **Organization Isolation** - Users see only data from their organization
+2. **Owner Restrictions** - Within an org, users can only modify their own rows (optional)
+3. **JWT Claims** - Uses `org` or `org_id` claim from JWT token
+4. **Admin Bypass** - Admins can access all organizations
+
+#### Team Scope Policies
+
+- **team_select** - See all rows in your organization
+- **team_insert** - Create rows for your org (owner-restricted if owner column exists)
+- **team_update** - Update rows in your org (owner-restricted if owner column exists)
+- **team_delete** - Delete rows in your org (owner-restricted if owner column exists)
+
+### Admin Override Policy
+
+The "admin_override" preset grants full access to admin and service tokens:
+
+```bash
+# Add admin bypass to existing policies
+npm run kickstack add-policy admin_override sensitive_data
+```
+
+This adds:
+- **admin_select** - Admins can read all rows
+- **admin_insert** - Admins can insert any rows
+- **admin_update** - Admins can update any rows
+- **admin_delete** - Admins can delete any rows
+
+**Note:** Admin override should be applied AFTER other policies. PostgreSQL combines policies with OR logic, so admins will have access even if other policies would deny it.
+
+### Generating JWT Tokens for Testing
+
+KickStack includes a token generator for testing different access scenarios:
+
+```bash
+# Generate a user token
+npm run kickstack generate-token user --email user@example.com --org-id <uuid>
+
+# Generate an admin token
+npm run kickstack generate-token admin --email admin@example.com
+
+# Generate a service token (for server-side operations)
+npm run kickstack generate-token service --expires-in 365d
+
+# Custom claims
+npm run kickstack generate-token user --claims '{"custom_field":"value"}'
+```
+
+Token options:
+- `--user-id <uuid>` - Set specific user ID
+- `--org-id <uuid>` - Set organization ID for multi-tenancy
+- `--email <email>` - Set email claim
+- `--expires-in <duration>` - Set expiration (e.g., 24h, 7d, 60m)
+- `--claims <json>` - Add custom JWT claims
+
+### Multi-Tenancy Example
+
+Complete workflow for setting up multi-tenant application:
+
+```bash
+# 1. Create a table with organization scope
+npm run kickstack add-table "projects with name text, status text, budget numeric"
+
+# 2. Add org and owner columns if needed
+npm run kickstack add-policy team_scope projects --add-org-col --add-owner-col
+
+# 3. Generate tokens for different organizations
+ORG1_TOKEN=$(npm run kickstack generate-token user --org-id 11111111-1111-1111-1111-111111111111 --email user1@org1.com)
+ORG2_TOKEN=$(npm run kickstack generate-token user --org-id 22222222-2222-2222-2222-222222222222 --email user2@org2.com)
+ADMIN_TOKEN=$(npm run kickstack generate-token admin)
+
+# 4. Org1 user creates a project (only visible to Org1)
+curl -X POST http://localhost:3050/projects \
+  -H "Authorization: Bearer $ORG1_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Org1 Project", "status": "active", "budget": 50000}'
+
+# 5. Org2 user cannot see Org1's project
+curl http://localhost:3050/projects \
+  -H "Authorization: Bearer $ORG2_TOKEN"
+# Returns: []
+
+# 6. Admin can see all projects
+curl http://localhost:3050/projects \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+# Returns: All projects from all organizations
+```
+
+### Testing Multi-Tenancy
+
+Run the multi-tenancy test suite:
+
+```bash
+cd ai/cli
+npm run test:unit tests/policies   # Unit tests for policy generation
+npm run test:integration            # Integration tests with real database
+```
+
 ### Security Best Practices
 
 1. **Always use RLS for user data** - Apply policies to any table containing user-specific data
 2. **Test with different users** - Verify isolation between user accounts
-3. **Monitor policy performance** - Use `EXPLAIN` to check query plans
-4. **Keep policies simple** - Complex policies can impact performance
-
-### Public Read Policy Preset
-
-The "public_read" preset allows anyone to read data while restricting modifications to owners:
-
-```bash
-# Create a table for blog posts
-npm run kickstack add-table "blog_posts with author_id uuid, title text, content text, published boolean"
-
-# Apply public_read policy - anyone can read, only authors can modify
-npm run kickstack add-policy public_read blog_posts --owner-col author_id
-```
-
-This creates four policies:
-- **select_public** - Anyone (including anonymous) can read all rows
-- **insert_own** - Users can only insert rows they own
-- **update_own** - Users can only update their rows
-- **delete_own** - Users can only delete their rows
-
-Perfect for:
-- Blog posts and articles
-- Public announcements
-- Product catalogs
-- Documentation
-- Any content meant for public consumption
-
-### Example: Public Blog System
-
-```bash
-# 1. Create blog posts table
-npm run kickstack add-table "posts with author_id uuid, title text, content text, tags jsonb"
-
-# 2. Enable public_read policy
-npm run kickstack add-policy public_read posts --owner-col author_id
-
-# 3. Anonymous users can read all posts
-curl http://localhost:3000/posts
-# Returns all posts without authentication
-
-# 4. Only authenticated authors can create posts
-curl -X POST http://localhost:3000/posts \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title": "My Public Post", "content": "Everyone can read this!"}'
-
-# 5. Authors can only edit their own posts
-curl -X PATCH http://localhost:3000/posts?id=eq.123 \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Updated Title"}'
-```
-
-### Policy Comparison
-
-| Preset | Anonymous Read | Anonymous Write | Auth Read | Auth Write |
-|--------|---------------|----------------|-----------|------------|
-| **owner** | ❌ No access | ❌ No access | ✅ Own rows only | ✅ Own rows only |
-| **public_read** | ✅ All rows | ❌ No access | ✅ All rows | ✅ Own rows only |
-
-### Upcoming Policy Presets
-
-Future releases will include:
-- **team_scope** - Share data within teams/organizations
-- **admin_override** - Admins can access all data
-- **custom** - AI-generated policies from natural language
+3. **Use team_scope for SaaS apps** - Provides organization-level data isolation
+4. **Limit admin tokens** - Only use admin/service tokens for server-side operations
+5. **Monitor policy performance** - Use `EXPLAIN` to check query plans
+6. **Keep policies simple** - Complex policies can impact performance
+7. **Rotate service tokens** - Regularly rotate long-lived tokens
+8. **Never expose service tokens** - Keep them server-side only
 
 ## Edge Functions (v0)
 
@@ -1335,7 +1589,7 @@ fly secrets list | grep JWT_SECRET
 fly ssh console -C "curl localhost:9999/health"
 
 # Verify PostgREST auth
-fly ssh console -C "curl localhost:3000/ -H 'Authorization: Bearer TOKEN'"
+fly ssh console -C "curl localhost:3050/ -H 'Authorization: Bearer TOKEN'"
 ```
 
 **Function Issues:**

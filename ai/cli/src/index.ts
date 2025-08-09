@@ -10,13 +10,26 @@ import { applyCommand } from './commands/apply';
 import { rollbackCommand } from './commands/rollback';
 import { deployFlyCommand, openCommand } from './commands/deploy';
 import { envPullCommand, envPushCommand } from './commands/env';
+import { generateTokenCommand } from './commands/generate-token';
+import { demoCommand } from './commands/demo';
 import templateCommand from './commands/template';
+import { seedCommand, validateSeedType, seedTypes } from './commands/seed';
+import { ErrorHandler } from './lib/error-handler';
 import chalk from 'chalk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
 // Load environment variables from infra/.env
 dotenv.config({ path: path.join(__dirname, '../../../infra/.env') });
+
+// Validate environment on startup
+(async () => {
+  try {
+    await ErrorHandler.validateEnvironment();
+  } catch (error) {
+    // Environment validation errors are already handled by ErrorHandler
+  }
+})();
 
 const program = new Command();
 
@@ -33,8 +46,7 @@ program
     try {
       await addTableCommand(description, options);
     } catch (error) {
-      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
-      process.exit(1);
+      ErrorHandler.handleError(error as Error, { command: 'add-table', description, options });
     }
   });
 
@@ -55,6 +67,8 @@ program
   .description('Add Row-Level Security policies to a table')
   .option('--owner-col <column>', 'Specify the owner column name', 'user_id')
   .option('--add-owner-col', 'Add the owner column if it doesn\'t exist')
+  .option('--org-col <column>', 'Specify the organization column name (for team_scope)', 'org_id')
+  .option('--add-org-col', 'Add the organization column if it doesn\'t exist (for team_scope)')
   .action(async (preset: string, table: string, options: any) => {
     try {
       await addPolicyCommand(preset, table, options);
@@ -153,6 +167,73 @@ program
 // Add template command
 program.addCommand(templateCommand);
 
+// Add demo command
+program
+  .command('demo')
+  .description('Manage KickStack demo applications')
+  .addCommand(
+    program.createCommand('list')
+      .description('List available demo applications')
+      .action(async () => {
+        try {
+          await demoCommand.list();
+        } catch (error) {
+          console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    program.createCommand('up <name>')
+      .description('Install a demo application locally')
+      .option('--with-seed', 'Include sample seed data')
+      .action(async (name: string, options: any) => {
+        try {
+          await demoCommand.up(name, options);
+        } catch (error) {
+          console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    program.createCommand('deploy <name>')
+      .description('Deploy a demo application to Fly.io')
+      .action(async (name: string) => {
+        try {
+          await demoCommand.deploy(name, {});
+        } catch (error) {
+          console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
+      })
+  );
+
+program
+  .command('generate-token <type>')
+  .description('Generate JWT tokens for testing (user, admin, service)')
+  .option('--user-id <id>', 'User ID for the token')
+  .option('--org-id <id>', 'Organization ID for the token')
+  .option('--email <email>', 'Email for the token')
+  .option('--expires-in <duration>', 'Token expiration (e.g., 24h, 7d, 60m)')
+  .option('--claims <json>', 'Additional claims as JSON string')
+  .action(async (type: string, options: any) => {
+    try {
+      if (options.claims) {
+        try {
+          options.claims = JSON.parse(options.claims);
+        } catch (e) {
+          console.error(chalk.red('Invalid JSON for claims'));
+          process.exit(1);
+        }
+      }
+      await generateTokenCommand(type, options);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
 program
   .command('open')
   .description('Open deployed application in browser')
@@ -162,6 +243,25 @@ program
     } catch (error) {
       console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
       process.exit(1);
+    }
+  });
+
+program
+  .command('seed')
+  .description('Seed the database with demo data for testing')
+  .option('--type <type>', `Data type to seed (${seedTypes.join(', ')})`, 'all')
+  .option('--clean', 'Clean existing demo data before seeding')
+  .action(async (options: any) => {
+    try {
+      if (!validateSeedType(options.type)) {
+        console.error(chalk.red(`Invalid seed type: ${options.type}`));
+        console.error(`Valid types: ${seedTypes.join(', ')}`);
+        process.exit(1);
+      }
+      
+      await seedCommand(options);
+    } catch (error) {
+      ErrorHandler.handleError(error as Error, { command: 'seed', options });
     }
   });
 

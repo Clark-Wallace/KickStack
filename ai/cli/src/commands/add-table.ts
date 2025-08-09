@@ -72,11 +72,11 @@ export async function addTableCommand(description: string, options: AddTableOpti
     // Display API endpoint information
     console.log(chalk.white('\n🔗 API Endpoints:'));
     console.log(chalk.gray('─'.repeat(50)));
-    console.log(chalk.green(`GET    http://localhost:3000/${tableSQL.tableName}`), chalk.gray('- List all records'));
-    console.log(chalk.green(`POST   http://localhost:3000/${tableSQL.tableName}`), chalk.gray('- Create new record'));
-    console.log(chalk.green(`GET    http://localhost:3000/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Get by ID'));
-    console.log(chalk.green(`PATCH  http://localhost:3000/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Update record'));
-    console.log(chalk.green(`DELETE http://localhost:3000/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Delete record'));
+    console.log(chalk.green(`GET    http://localhost:3050/${tableSQL.tableName}`), chalk.gray('- List all records'));
+    console.log(chalk.green(`POST   http://localhost:3050/${tableSQL.tableName}`), chalk.gray('- Create new record'));
+    console.log(chalk.green(`GET    http://localhost:3050/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Get by ID'));
+    console.log(chalk.green(`PATCH  http://localhost:3050/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Update record'));
+    console.log(chalk.green(`DELETE http://localhost:3050/${tableSQL.tableName}?id=eq.1`), chalk.gray('- Delete record'));
     console.log(chalk.gray('─'.repeat(50)));
     
     if (options.realtime) {

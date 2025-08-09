@@ -1,6 +1,6 @@
 import { AuthService } from './auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3050';
 
 export class ApiClient {
   private static getHeaders(): HeadersInit {

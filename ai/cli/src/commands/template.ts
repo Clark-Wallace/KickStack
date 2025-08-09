@@ -38,7 +38,7 @@ program
         console.log('');
       }
     } catch (error) {
-      console.error(chalk.red('Error searching templates:'), error.message);
+      console.error(chalk.red('Error searching templates:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -60,20 +60,20 @@ program
       console.log(`${chalk.bold('Description:')} ${info.description}`);
       console.log(`${chalk.bold('Category:')} ${info.category}`);
       console.log(`${chalk.bold('Tags:')} ${info.tags.join(', ')}`);
-      console.log(`${chalk.bold('Author:')} ${info.author || 'Unknown'}`);
-      console.log(`${chalk.bold('License:')} ${info.license || 'Unknown'}`);
-      console.log(`${chalk.bold('Min Version:')} ${info.kickstack_min_version || '1.0.0'}`);
+      console.log(`${chalk.bold('Author:')} ${(info as any).author || 'Unknown'}`);
+      console.log(`${chalk.bold('License:')} ${(info as any).license || 'Unknown'}`);
+      console.log(`${chalk.bold('Min Version:')} ${(info as any).kickstack_min_version || '1.0.0'}`);
       
-      if (info.contents) {
+      if ((info as any).contents) {
         console.log(`\n${chalk.bold('Contents:')}`);
-        if (info.contents.tables?.length) {
-          console.log(`  ${chalk.blue('Tables:')} ${info.contents.tables.join(', ')}`);
+        if ((info as any).contents.tables?.length) {
+          console.log(`  ${chalk.blue('Tables:')} ${(info as any).contents.tables.join(', ')}`);
         }
-        if (info.contents.policies?.length) {
-          console.log(`  ${chalk.blue('Policies:')} ${info.contents.policies.join(', ')}`);
+        if ((info as any).contents.policies?.length) {
+          console.log(`  ${chalk.blue('Policies:')} ${(info as any).contents.policies.join(', ')}`);
         }
-        if (info.contents.functions?.length) {
-          console.log(`  ${chalk.blue('Functions:')} ${info.contents.functions.join(', ')}`);
+        if ((info as any).contents.functions?.length) {
+          console.log(`  ${chalk.blue('Functions:')} ${(info as any).contents.functions.join(', ')}`);
         }
       }
       
@@ -85,7 +85,7 @@ program
         console.log(readme.substring(0, 500) + (readme.length > 500 ? '...' : ''));
       }
     } catch (error) {
-      console.error(chalk.red('Error getting template info:'), error.message);
+      console.error(chalk.red('Error getting template info:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -105,14 +105,14 @@ program
         const info = await manager.getTemplateInfo(name);
         console.log(chalk.blue(`\n📋 Preview: Installing ${info.display_name}`));
         console.log(`This would stage:`);
-        if (info.contents?.tables?.length) {
-          console.log(`  • ${info.contents.tables.length} database table(s)`);
+        if ((info as any).contents?.tables?.length) {
+          console.log(`  • ${(info as any).contents.tables.length} database table(s)`);
         }
-        if (info.contents?.policies?.length) {
-          console.log(`  • ${info.contents.policies.length} RLS policy preset(s)`);
+        if ((info as any).contents?.policies?.length) {
+          console.log(`  • ${(info as any).contents.policies.length} RLS policy preset(s)`);
         }
-        if (info.contents?.functions?.length) {
-          console.log(`  • ${info.contents.functions.length} edge function(s)`);
+        if ((info as any).contents?.functions?.length) {
+          console.log(`  • ${(info as any).contents.functions.length} edge function(s)`);
         }
         return;
       }
@@ -150,7 +150,7 @@ program
       console.log(`3. Test your new features`);
       
     } catch (error) {
-      console.error(chalk.red('Error installing template:'), error.message);
+      console.error(chalk.red('Error installing template:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -184,7 +184,7 @@ program
       console.log(`2. Publish: ${chalk.cyan(`kickstack template publish ${result.filename}`)}`);
       
     } catch (error) {
-      console.error(chalk.red('Error packaging template:'), error.message);
+      console.error(chalk.red('Error packaging template:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -215,7 +215,7 @@ program
       }
       
     } catch (error) {
-      console.error(chalk.red('Error publishing template:'), error.message);
+      console.error(chalk.red('Error publishing template:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -245,7 +245,7 @@ program
       }
       
     } catch (error) {
-      console.error(chalk.red('Error listing templates:'), error.message);
+      console.error(chalk.red('Error listing templates:'), (error as Error).message);
       process.exit(1);
     }
   });
@@ -268,7 +268,7 @@ program
       }
       
     } catch (error) {
-      console.error(chalk.red('Error updating index:'), error.message);
+      console.error(chalk.red('Error updating index:'), (error as Error).message);
       process.exit(1);
     }
   });

@@ -240,12 +240,17 @@ export class ApplyService {
       const restoreCmd = `docker compose -f infra/docker-compose.yml exec -T postgres psql -U kick -d kickstack`;
       const schemaSQL = fs.readFileSync(snapshotPath, 'utf8');
       
-      // Execute via stdin
-      const { stderr } = await execAsync(restoreCmd, { input: schemaSQL });
+      // Execute via stdin using a temporary file
+      const tempFile = `/tmp/restore_${Date.now()}.sql`;
+      fs.writeFileSync(tempFile, schemaSQL);
+      const { stderr } = await execAsync(`${restoreCmd} < ${tempFile}`);
       
       if (stderr && !stderr.includes('NOTICE')) {
         throw new Error(`Rollback failed: ${stderr}`);
       }
+      
+      // Clean up temp file
+      fs.unlinkSync(tempFile);
       
       console.log(chalk.green('✓ Rollback completed successfully'));
       

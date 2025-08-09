@@ -99,7 +99,7 @@ export class TemplateManager {
         const templates = await response.json() as TemplateIndexEntry[];
         allTemplates = [...allTemplates, ...templates];
       } catch (error) {
-        console.warn(`Error fetching index from ${indexUrl}:`, error.message);
+        console.warn(`Error fetching index from ${indexUrl}:`, (error as Error).message);
       }
     }
     
@@ -212,7 +212,7 @@ export class TemplateManager {
       
       return manifest;
     } catch (error) {
-      throw new Error(`Failed to load template manifest: ${error.message}`);
+      throw new Error(`Failed to load template manifest: ${(error as Error).message}`);
     }
   }
 

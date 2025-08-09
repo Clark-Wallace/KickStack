@@ -1,0 +1,169 @@
+version: 1
+name: ecommerce-demo
+summary: "E-commerce platform with products (public_read), orders (team_scope), and payment webhook"
+description: |
+  A complete e-commerce platform demonstrating:
+  - Public product catalog with inventory tracking
+  - Shopping cart functionality
+  - Order management with team scope (multi-vendor)
+  - Payment processing webhook
+  - Inventory management
+  - Customer reviews and ratings
+
+steps:
+  - kind: table
+    name: products
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: vendor_id, type: uuid, nullable: false }
+      - { name: org_id, type: uuid, nullable: false }
+      - { name: name, type: text, nullable: false }
+      - { name: slug, type: text, nullable: false, unique: true }
+      - { name: description, type: text }
+      - { name: price, type: decimal(10,2), nullable: false }
+      - { name: compare_at_price, type: decimal(10,2) }
+      - { name: cost, type: decimal(10,2) }
+      - { name: sku, type: text, unique: true }
+      - { name: barcode, type: text }
+      - { name: inventory_quantity, type: integer, default: 0 }
+      - { name: track_inventory, type: boolean, default: true }
+      - { name: weight, type: decimal(10,3) }
+      - { name: weight_unit, type: text, default: "'kg'" }
+      - { name: images, type: jsonb, default: "'[]'::jsonb" }
+      - { name: categories, type: jsonb, default: "'[]'::jsonb" }
+      - { name: tags, type: jsonb, default: "'[]'::jsonb" }
+      - { name: variants, type: jsonb, default: "'[]'::jsonb" }
+      - { name: published, type: boolean, default: false }
+      - { name: published_at, type: timestamptz }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [slug] }
+      - { columns: [sku] }
+      - { columns: [vendor_id] }
+      - { columns: [org_id] }
+      - { columns: [published, published_at] }
+    policy:
+      preset: public_read
+      owner_col: vendor_id
+
+  - kind: table
+    name: orders
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: org_id, type: uuid, nullable: false }
+      - { name: order_number, type: text, nullable: false, unique: true }
+      - { name: customer_id, type: uuid, nullable: false }
+      - { name: customer_email, type: text, nullable: false }
+      - { name: customer_name, type: text, nullable: false }
+      - { name: status, type: text, default: "'pending'", check: "status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded')" }
+      - { name: payment_status, type: text, default: "'pending'", check: "payment_status IN ('pending', 'paid', 'failed', 'refunded')" }
+      - { name: shipping_address, type: jsonb, nullable: false }
+      - { name: billing_address, type: jsonb, nullable: false }
+      - { name: line_items, type: jsonb, nullable: false }
+      - { name: subtotal, type: decimal(10,2), nullable: false }
+      - { name: tax_amount, type: decimal(10,2), default: 0 }
+      - { name: shipping_amount, type: decimal(10,2), default: 0 }
+      - { name: discount_amount, type: decimal(10,2), default: 0 }
+      - { name: total_amount, type: decimal(10,2), nullable: false }
+      - { name: currency, type: text, default: "'USD'" }
+      - { name: payment_method, type: text }
+      - { name: payment_id, type: text }
+      - { name: notes, type: text }
+      - { name: metadata, type: jsonb, default: "'{}'::jsonb" }
+      - { name: shipped_at, type: timestamptz }
+      - { name: delivered_at, type: timestamptz }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [order_number] }
+      - { columns: [customer_id] }
+      - { columns: [org_id, created_at] }
+      - { columns: [status] }
+      - { columns: [payment_status] }
+    policy:
+      preset: team_scope
+      org_col: org_id
+    realtime: true
+
+  - kind: table
+    name: cart_items
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: session_id, type: text, nullable: false }
+      - { name: user_id, type: uuid }
+      - { name: product_id, type: uuid, nullable: false, ref: "products(id) ON DELETE CASCADE" }
+      - { name: variant_id, type: text }
+      - { name: quantity, type: integer, nullable: false, check: "quantity > 0" }
+      - { name: price, type: decimal(10,2), nullable: false }
+      - { name: metadata, type: jsonb, default: "'{}'::jsonb" }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [session_id] }
+      - { columns: [user_id] }
+      - { columns: [product_id] }
+    policy:
+      preset: owner
+      owner_col: user_id
+
+  - kind: table
+    name: reviews
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: product_id, type: uuid, nullable: false, ref: "products(id) ON DELETE CASCADE" }
+      - { name: customer_id, type: uuid, nullable: false }
+      - { name: customer_name, type: text, nullable: false }
+      - { name: rating, type: integer, nullable: false, check: "rating >= 1 AND rating <= 5" }
+      - { name: title, type: text }
+      - { name: comment, type: text }
+      - { name: verified_purchase, type: boolean, default: false }
+      - { name: helpful_count, type: integer, default: 0 }
+      - { name: images, type: jsonb, default: "'[]'::jsonb" }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [product_id, created_at] }
+      - { columns: [customer_id] }
+      - { columns: [rating] }
+    policy:
+      preset: public_read
+      owner_col: customer_id
+
+  - kind: function
+    name: process_payment
+    runtime: edge
+    path: functions/process_payment.ts
+    env:
+      - STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET
+
+  - kind: function
+    name: calculate_shipping
+    runtime: edge
+    path: functions/calculate_shipping.ts
+
+  - kind: function
+    name: update_inventory
+    runtime: edge
+    path: functions/update_inventory.ts
+
+verification:
+  smoke:
+    - { method: GET, path: "/products", expect: 200 }
+    - { method: GET, path: "/orders", expect: 200 }
+    - { method: GET, path: "/cart_items", expect: 200 }
+    - { method: GET, path: "/reviews", expect: 200 }
+    - { method: POST, path: "/fn/process_payment", expect: 200, body: '{"amount":100,"currency":"USD"}' }
+    - { method: POST, path: "/fn/calculate_shipping", expect: 200, body: '{"weight":1,"destination":"US"}' }
+
+features:
+  - Public product catalog
+  - Multi-vendor support with team scope
+  - Shopping cart management
+  - Order processing workflow
+  - Payment webhook integration
+  - Inventory tracking
+  - Customer reviews and ratings
+  - Real-time order updates
+  - SKU and barcode support

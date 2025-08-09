@@ -1,0 +1,103 @@
+version: 1
+name: blog-demo
+summary: "Blog platform with public posts, owner comments, notification function, and realtime updates"
+description: |
+  A complete blogging platform demonstrating:
+  - Public read posts with author-only editing
+  - Comment system with owner-based security
+  - Email notification function for new comments
+  - Realtime updates via WebSocket
+  - JWT authentication integration
+
+steps:
+  - kind: table
+    name: blog_posts
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: author_id, type: uuid, nullable: false }
+      - { name: author_name, type: text, nullable: false }
+      - { name: title, type: text, nullable: false }
+      - { name: slug, type: text, nullable: false, unique: true }
+      - { name: excerpt, type: text }
+      - { name: body, type: text, nullable: false }
+      - { name: featured_image, type: text }
+      - { name: tags, type: jsonb, default: "'[]'::jsonb" }
+      - { name: published, type: boolean, default: false }
+      - { name: published_at, type: timestamptz }
+      - { name: views, type: integer, default: 0 }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [slug] }
+      - { columns: [published, published_at] }
+      - { columns: [author_id] }
+    policy:
+      preset: public_read
+      owner_col: author_id
+    realtime: true
+
+  - kind: table
+    name: blog_comments
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: post_id, type: uuid, nullable: false, ref: "blog_posts(id) ON DELETE CASCADE" }
+      - { name: user_id, type: uuid, nullable: false }
+      - { name: user_name, type: text, nullable: false }
+      - { name: body, type: text, nullable: false }
+      - { name: approved, type: boolean, default: true }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [post_id, created_at] }
+      - { columns: [user_id] }
+    policy:
+      preset: owner
+      owner_col: user_id
+    realtime: true
+
+  - kind: table
+    name: blog_likes
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: post_id, type: uuid, nullable: false, ref: "blog_posts(id) ON DELETE CASCADE" }
+      - { name: user_id, type: uuid, nullable: false }
+      - { name: created_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [post_id, user_id], unique: true }
+    policy:
+      preset: owner
+      owner_col: user_id
+
+  - kind: function
+    name: notify_comment
+    runtime: edge
+    path: functions/notify_comment.ts
+    env:
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASS
+
+  - kind: function
+    name: increment_views
+    runtime: edge
+    path: functions/increment_views.ts
+
+verification:
+  smoke:
+    - { method: GET, path: "/blog_posts", expect: 200 }
+    - { method: GET, path: "/blog_comments", expect: 200 }
+    - { method: GET, path: "/blog_likes", expect: 200 }
+    - { method: POST, path: "/fn/notify_comment", expect: 200, body: '{"post_id":"test","comment":"test"}' }
+    - { method: POST, path: "/fn/increment_views", expect: 200, body: '{"post_id":"test"}' }
+
+features:
+  - Public post viewing
+  - Author-only post editing
+  - Comment system with owner permissions
+  - Like/unlike functionality
+  - View counter
+  - Tag support
+  - Email notifications
+  - Realtime updates
+  - SEO-friendly slugs

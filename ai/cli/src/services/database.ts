@@ -33,23 +33,77 @@ export class DatabaseService {
     // Write SQL to temp file and execute via psql
     const tempFile = `/tmp/migration_${Date.now()}.sql`;
     const fs = require('fs');
-    fs.writeFileSync(tempFile, sql);
     
     try {
+      fs.writeFileSync(tempFile, sql);
+    } catch (fileError) {
+      throw new Error(`Failed to write migration file: ${fileError}`);
+    }
+    
+    try {
+      // Check if Docker is available and services are running
+      await execAsync('docker info');
+      
+      const composePath = path.join(__dirname, '../../../../infra/docker-compose.yml');
+      if (!fs.existsSync(composePath)) {
+        throw new Error(`Docker Compose file not found at: ${composePath}`);
+      }
+      
+      // Check if postgres service is running
+      try {
+        await execAsync(`docker compose -f ${composePath} ps postgres`);
+      } catch (psError) {
+        throw new Error('PostgreSQL container is not running. Start services with: docker-compose up -d');
+      }
+      
       // Try to use Docker first
-      const dockerCommand = `docker compose -f ${path.join(__dirname, '../../../../infra/docker-compose.yml')} exec -T postgres psql -U kick -d kickstack -v ON_ERROR_STOP=1 -f - < ${tempFile}`;
-      await execAsync(dockerCommand);
-    } catch (dockerError) {
+      const dockerCommand = `docker compose -f ${composePath} exec -T postgres psql -U kick -d kickstack -v ON_ERROR_STOP=1 -f - < ${tempFile}`;
+      const { stdout, stderr } = await execAsync(dockerCommand);
+      
+      if (stderr && stderr.includes('ERROR')) {
+        throw new Error(`Migration SQL error: ${stderr}`);
+      }
+      
+    } catch (dockerError: any) {
+      console.warn('Docker execution failed, trying direct psql connection...');
+      
       // Fallback to direct psql if Docker fails
       try {
+        // Test connection first
+        await execAsync(`psql "${this.connectionString}" -c "SELECT 1;"`);
+        
         const psqlCommand = `psql "${this.connectionString}" -v ON_ERROR_STOP=1 -f ${tempFile}`;
-        await execAsync(psqlCommand);
-      } catch (psqlError) {
-        throw new Error(`Migration failed: ${psqlError}`);
+        const { stdout, stderr } = await execAsync(psqlCommand);
+        
+        if (stderr && stderr.includes('ERROR')) {
+          throw new Error(`Migration SQL error: ${stderr}`);
+        }
+        
+      } catch (psqlError: any) {
+        // Provide more helpful error messages
+        let errorMessage = 'Migration failed: ';
+        
+        if (psqlError.message.includes('connection refused')) {
+          errorMessage += 'Cannot connect to database. Make sure PostgreSQL is running and connection details are correct.';
+        } else if (psqlError.message.includes('authentication failed')) {
+          errorMessage += 'Database authentication failed. Check username and password.';
+        } else if (psqlError.message.includes('database') && psqlError.message.includes('does not exist')) {
+          errorMessage += 'Database "kickstack" does not exist. Create it or run initial setup.';
+        } else {
+          errorMessage += psqlError.message;
+        }
+        
+        throw new Error(errorMessage);
       }
     } finally {
       // Clean up temp file
-      fs.unlinkSync(tempFile);
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch (cleanupError) {
+        console.warn(`Warning: Could not clean up temp file ${tempFile}:`, cleanupError);
+      }
     }
   }
 
@@ -98,20 +152,48 @@ export class DatabaseService {
     }
   }
 
-  private async runQuery(query: string): Promise<string> {
+  async runQuery(query: string): Promise<string> {
     try {
+      // Check if Docker is available
+      await execAsync('docker info');
+      
+      const composePath = path.join(__dirname, '../../../../infra/docker-compose.yml');
+      
       // Try Docker first
-      const dockerCommand = `docker compose -f ${path.join(__dirname, '../../../../infra/docker-compose.yml')} exec -T postgres psql -U kick -d kickstack -t -c "${query.replace(/"/g, '\\"')}"`;
-      const { stdout } = await execAsync(dockerCommand);
+      const dockerCommand = `docker compose -f ${composePath} exec -T postgres psql -U kick -d kickstack -t -c "${query.replace(/"/g, '\\"')}"`;
+      const { stdout, stderr } = await execAsync(dockerCommand);
+      
+      if (stderr && stderr.includes('ERROR')) {
+        throw new Error(`Database query error: ${stderr}`);
+      }
+      
       return stdout;
-    } catch (dockerError) {
+    } catch (dockerError: any) {
       // Fallback to direct psql
       try {
         const psqlCommand = `psql "${this.connectionString}" -t -c "${query.replace(/"/g, '\\"')}"`;
-        const { stdout } = await execAsync(psqlCommand);
+        const { stdout, stderr } = await execAsync(psqlCommand);
+        
+        if (stderr && stderr.includes('ERROR')) {
+          throw new Error(`Database query error: ${stderr}`);
+        }
+        
         return stdout;
-      } catch (psqlError) {
-        throw new Error(`Query failed: ${psqlError}`);
+      } catch (psqlError: any) {
+        // Provide more helpful error messages
+        let errorMessage = 'Database query failed: ';
+        
+        if (psqlError.message.includes('connection refused')) {
+          errorMessage += 'Cannot connect to database. Ensure PostgreSQL is running.';
+        } else if (psqlError.message.includes('authentication failed')) {
+          errorMessage += 'Authentication failed. Check database credentials.';
+        } else if (psqlError.message.includes('does not exist')) {
+          errorMessage += 'Database or table does not exist.';
+        } else {
+          errorMessage += psqlError.message;
+        }
+        
+        throw new Error(errorMessage);
       }
     }
   }
@@ -119,6 +201,31 @@ export class DatabaseService {
   async runQueryBoolean(query: string): Promise<boolean> {
     const result = await this.runQuery(query);
     return result.toLowerCase().includes('t');
+  }
+
+  async runQueryJson(query: string): Promise<any> {
+    try {
+      // Try Docker first with JSON output
+      const dockerCommand = `docker compose -f ${path.join(__dirname, '../../../../infra/docker-compose.yml')} exec -T postgres psql -U kick -d kickstack -t -A -c "${query.replace(/"/g, '\\"')}"`;
+      const { stdout } = await execAsync(dockerCommand);
+      
+      // Parse the result assuming it's a single row with boolean columns
+      const values = stdout.trim().split('|').map(v => v.trim() === 't');
+      return {
+        rows: [{
+          has_auth_org: values[0],
+          has_is_admin: values[1]
+        }]
+      };
+    } catch (error) {
+      // Fallback - return false for both
+      return {
+        rows: [{
+          has_auth_org: false,
+          has_is_admin: false
+        }]
+      };
+    }
   }
 
   getConnectionString(): string {

@@ -5,6 +5,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import jwt from 'jsonwebtoken';
+import demosRouter from './routes/demos';
 
 const app = express();
 const PORT = process.env.DASHBOARD_API_PORT || 8787;
@@ -184,6 +185,9 @@ app.post('/api/templates/refresh-index', async (req, res) => {
     res.status(500).json({ error: 'Failed to refresh template index' });
   }
 });
+
+// Mount demos router
+app.use('/api', demosRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -1,0 +1,189 @@
+version: 1
+name: crm-demo
+summary: "Multi-tenant CRM with organizations, contacts (team_scope), admin override, and service tokens"
+description: |
+  A complete multi-tenant CRM demonstrating:
+  - Organization-based data isolation
+  - Contact and lead management with team scope
+  - Deal pipeline and opportunity tracking
+  - Admin override for support access
+  - Service tokens for integrations
+  - Activity tracking and notes
+  - Custom fields support
+
+steps:
+  - kind: table
+    name: organizations
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: name, type: text, nullable: false }
+      - { name: slug, type: text, nullable: false, unique: true }
+      - { name: plan, type: text, default: "'free'", check: "plan IN ('free', 'starter', 'pro', 'enterprise')" }
+      - { name: owner_id, type: uuid, nullable: false }
+      - { name: settings, type: jsonb, default: "'{}'::jsonb" }
+      - { name: billing_email, type: text }
+      - { name: max_users, type: integer, default: 5 }
+      - { name: max_contacts, type: integer, default: 1000 }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [slug] }
+      - { columns: [owner_id] }
+    policy:
+      preset: team_scope
+      org_col: id
+
+  - kind: table
+    name: contacts
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: org_id, type: uuid, nullable: false, ref: "organizations(id) ON DELETE CASCADE" }
+      - { name: owner_id, type: uuid, nullable: false }
+      - { name: first_name, type: text, nullable: false }
+      - { name: last_name, type: text, nullable: false }
+      - { name: email, type: text }
+      - { name: phone, type: text }
+      - { name: company, type: text }
+      - { name: title, type: text }
+      - { name: source, type: text }
+      - { name: status, type: text, default: "'lead'", check: "status IN ('lead', 'prospect', 'customer', 'churned')" }
+      - { name: score, type: integer, default: 0 }
+      - { name: address, type: jsonb }
+      - { name: social_profiles, type: jsonb, default: "'{}'::jsonb" }
+      - { name: custom_fields, type: jsonb, default: "'{}'::jsonb" }
+      - { name: tags, type: jsonb, default: "'[]'::jsonb" }
+      - { name: last_contacted_at, type: timestamptz }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [org_id, email] }
+      - { columns: [org_id, status] }
+      - { columns: [org_id, owner_id] }
+      - { columns: [org_id, created_at] }
+    policy:
+      preset: team_scope
+      org_col: org_id
+      owner_col: owner_id
+    realtime: true
+
+  - kind: table
+    name: deals
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: org_id, type: uuid, nullable: false, ref: "organizations(id) ON DELETE CASCADE" }
+      - { name: contact_id, type: uuid, ref: "contacts(id) ON DELETE SET NULL" }
+      - { name: owner_id, type: uuid, nullable: false }
+      - { name: name, type: text, nullable: false }
+      - { name: stage, type: text, default: "'qualification'", check: "stage IN ('qualification', 'proposal', 'negotiation', 'closed_won', 'closed_lost')" }
+      - { name: amount, type: decimal(12,2) }
+      - { name: currency, type: text, default: "'USD'" }
+      - { name: probability, type: integer, default: 50, check: "probability >= 0 AND probability <= 100" }
+      - { name: expected_close_date, type: date }
+      - { name: actual_close_date, type: date }
+      - { name: close_reason, type: text }
+      - { name: notes, type: text }
+      - { name: metadata, type: jsonb, default: "'{}'::jsonb" }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [org_id, stage] }
+      - { columns: [org_id, owner_id] }
+      - { columns: [contact_id] }
+    policy:
+      preset: team_scope
+      org_col: org_id
+      owner_col: owner_id
+    realtime: true
+
+  - kind: table
+    name: activities
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: org_id, type: uuid, nullable: false, ref: "organizations(id) ON DELETE CASCADE" }
+      - { name: contact_id, type: uuid, ref: "contacts(id) ON DELETE CASCADE" }
+      - { name: deal_id, type: uuid, ref: "deals(id) ON DELETE CASCADE" }
+      - { name: user_id, type: uuid, nullable: false }
+      - { name: type, type: text, nullable: false, check: "type IN ('call', 'email', 'meeting', 'task', 'note')" }
+      - { name: subject, type: text, nullable: false }
+      - { name: description, type: text }
+      - { name: status, type: text, default: "'pending'", check: "status IN ('pending', 'completed', 'cancelled')" }
+      - { name: due_date, type: timestamptz }
+      - { name: completed_at, type: timestamptz }
+      - { name: metadata, type: jsonb, default: "'{}'::jsonb" }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: updated_at, type: timestamptz, default: now() }
+    indexes:
+      - { columns: [org_id, type, status] }
+      - { columns: [contact_id] }
+      - { columns: [deal_id] }
+      - { columns: [user_id] }
+    policy:
+      preset: team_scope
+      org_col: org_id
+      owner_col: user_id
+
+  - kind: table
+    name: api_keys
+    columns:
+      - { name: id, type: uuid, pk: true, default: "gen_random_uuid()" }
+      - { name: org_id, type: uuid, nullable: false, ref: "organizations(id) ON DELETE CASCADE" }
+      - { name: name, type: text, nullable: false }
+      - { name: key_hash, type: text, nullable: false, unique: true }
+      - { name: permissions, type: jsonb, default: "'[\"read\"]'::jsonb" }
+      - { name: last_used_at, type: timestamptz }
+      - { name: expires_at, type: timestamptz }
+      - { name: created_at, type: timestamptz, default: now() }
+      - { name: revoked_at, type: timestamptz }
+    indexes:
+      - { columns: [key_hash] }
+      - { columns: [org_id] }
+    policy:
+      preset: team_scope
+      org_col: org_id
+
+  - kind: function
+    name: sync_contacts
+    runtime: edge
+    path: functions/sync_contacts.ts
+    env:
+      - SERVICE_TOKEN
+
+  - kind: function
+    name: calculate_lead_score
+    runtime: edge
+    path: functions/calculate_lead_score.ts
+
+  - kind: function
+    name: export_contacts
+    runtime: edge
+    path: functions/export_contacts.ts
+
+  # Apply admin override to all tables for support access
+  - kind: policy
+    preset: admin_override
+    tables:
+      - organizations
+      - contacts
+      - deals
+      - activities
+      - api_keys
+
+verification:
+  smoke:
+    - { method: GET, path: "/organizations", expect: 200 }
+    - { method: GET, path: "/contacts", expect: 200 }
+    - { method: GET, path: "/deals", expect: 200 }
+    - { method: GET, path: "/activities", expect: 200 }
+    - { method: POST, path: "/fn/sync_contacts", expect: 200, body: '{"source":"csv","data":[]}' }
+
+features:
+  - Multi-tenant architecture with org isolation
+  - Contact and lead management
+  - Deal pipeline tracking
+  - Activity logging
+  - Custom fields support
+  - API key management for integrations
+  - Admin override for support
+  - Service tokens for backend operations
+  - Real-time updates
+  - Lead scoring

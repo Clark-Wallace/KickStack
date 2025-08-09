@@ -6,7 +6,7 @@ services:
     image: postgres:16-alpine
     container_name: kickstack-postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: kick
       POSTGRES_PASSWORD: kickpass
@@ -27,7 +27,7 @@ services:
     image: postgrest/postgrest:v12.0.2
     container_name: kickstack-postgrest
     ports:
-      - "3000:3000"
+      - "${PGRST_PORT:-3050}:3000"
     environment:
       PGRST_DB_URI: "postgres://kick:kickpass@postgres:5432/kickstack"
       PGRST_DB_SCHEMAS: "public"
@@ -46,20 +46,28 @@ services:
     image: supabase/gotrue:v2.151.0
     container_name: kickstack-gotrue
     ports:
-      - "9999:9999"
+      - "${GOTRUE_PORT:-9999}:9999"
     environment:
+      # Required GoTrue configuration
       GOTRUE_API_HOST: "0.0.0.0"
       GOTRUE_API_PORT: "9999"
-      GOTRUE_DB_DRIVER: "postgres"
-      GOTRUE_DB_DATABASE_URL: "postgres://kick:kickpass@postgres:5432/kickstack?sslmode=disable"
+      API_EXTERNAL_URL: "http://localhost:9999"
       GOTRUE_SITE_URL: "http://localhost:3001"
       GOTRUE_URI_ALLOW_LIST: "*"
-      GOTRUE_DISABLE_SIGNUP: "false"
-      GOTRUE_JWT_ADMIN_ROLES: "service_role"
+      
+      # Database configuration
+      GOTRUE_DB_DRIVER: "postgres"
+      GOTRUE_DB_DATABASE_URL: "postgres://kick:kickpass@postgres:5432/kickstack?sslmode=disable"
+      
+      # JWT configuration
+      GOTRUE_JWT_SECRET: "${JWT_SECRET:-changeme_use_openssl_rand_hex_32_to_generate}"
       GOTRUE_JWT_AUD: "authenticated"
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: "authenticated"
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: "authenticated" 
+      GOTRUE_JWT_ADMIN_ROLES: "service_role"
       GOTRUE_JWT_EXP: "3600"
-      GOTRUE_JWT_SECRET: "${JWT_SECRET}"
+      
+      # Email/Signup configuration
+      GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
       GOTRUE_SMTP_HOST: "mailhog"
@@ -67,8 +75,10 @@ services:
       GOTRUE_SMTP_USER: ""
       GOTRUE_SMTP_PASS: ""
       GOTRUE_SMTP_ADMIN_EMAIL: "admin@kickstack.local"
+      
+      # URL paths for email templates
       GOTRUE_MAILER_URLPATHS_INVITE: "/auth/v1/verify"
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: "/auth/v1/verify"
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: "/auth/v1/verify" 
       GOTRUE_MAILER_URLPATHS_RECOVERY: "/auth/v1/verify"
       GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: "/auth/v1/verify"
       GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
@@ -86,8 +96,8 @@ services:
     image: minio/minio:latest
     container_name: kickstack-minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
@@ -108,8 +118,8 @@ services:
     image: mailhog/mailhog:latest
     container_name: kickstack-mailhog
     ports:
-      - "1025:1025"  # SMTP server
-      - "8025:8025"  # Web UI
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"  # SMTP server
+      - "${MAILHOG_WEB_PORT:-8025}:8025"   # Web UI
     networks:
       - kickstack-network
 

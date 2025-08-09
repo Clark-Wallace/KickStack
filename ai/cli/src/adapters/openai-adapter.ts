@@ -15,6 +15,32 @@ export class OpenAIAdapter implements ModelAdapter {
     return this.openai !== null;
   }
 
+  async generateSQL(prompt: string): Promise<string> {
+    if (!this.openai) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.3,
+        max_tokens: 2000
+      });
+
+      const response = completion.choices[0]?.message?.content;
+      if (!response) {
+        throw new Error('No response from OpenAI');
+      }
+
+      return response;
+    } catch (error) {
+      throw new Error(`OpenAI generation failed: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
   async nlToCreateTable(spec: NLTableSpec): Promise<TableSQL> {
     if (!this.openai) {
       throw new Error('OpenAI API key not configured');
