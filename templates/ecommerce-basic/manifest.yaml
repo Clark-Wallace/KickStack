@@ -1,0 +1,26 @@
+version: 1
+name: ecommerce-basic
+display_name: "Basic E-commerce"
+description: "Products (public_read), Orders (owner), and Payment webhook function"
+category: application
+tags: [ecommerce, shop, products, orders, payments, public_read, owner]
+author: "@kickstack"
+license: MIT
+verified: true
+kickstack_min_version: 1.0.0
+
+contents:
+  tables:
+    - products
+    - orders
+    - order_items
+  policies:
+    - public_read
+    - owner
+  functions:
+    - payment_webhook
+
+dependencies: []
+env_vars:
+  - KICKSTACK_FN_STRIPE_WEBHOOK_SECRET
+  - KICKSTACK_FN_ADMIN_EMAIL

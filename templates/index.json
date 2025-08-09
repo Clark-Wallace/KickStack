@@ -1,0 +1,26 @@
+[
+  {
+    "name": "blog-basic",
+    "display_name": "Basic Blog",
+    "description": "Posts (public_read) and Comments (owner) schema with notification function",
+    "category": "application",
+    "tags": ["blog", "public_read", "owner", "demo", "social"],
+    "url": "https://templates.kickstack.dev/blog-basic.tar.gz",
+    "verified": true,
+    "version": "1.0.0",
+    "size": 15432,
+    "checksum": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+  },
+  {
+    "name": "ecommerce-basic",
+    "display_name": "Basic E-commerce",
+    "description": "Products (public_read), Orders (owner), and Payment webhook function",
+    "category": "application", 
+    "tags": ["ecommerce", "shop", "products", "orders", "payments", "public_read", "owner"],
+    "url": "https://templates.kickstack.dev/ecommerce-basic.tar.gz",
+    "verified": true,
+    "version": "1.0.0",
+    "size": 18765,
+    "checksum": "b2c3d4e5f67890123456789012345678901abcdef23456789012bcdef234567"
+  }
+]

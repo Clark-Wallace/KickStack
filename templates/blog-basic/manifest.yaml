@@ -1,0 +1,24 @@
+version: 1
+name: blog-basic
+display_name: "Basic Blog"
+description: "Posts (public_read) and Comments (owner) schema with notification function"
+category: application
+tags: [blog, public_read, owner, demo, social]
+author: "@kickstack"
+license: MIT
+verified: true
+kickstack_min_version: 1.0.0
+
+contents:
+  tables:
+    - posts
+    - comments
+  policies:
+    - public_read
+    - owner
+  functions:
+    - notify_comment
+
+dependencies: []
+env_vars:
+  - KICKSTACK_FN_WEBHOOK_URL

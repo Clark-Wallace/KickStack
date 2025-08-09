@@ -1,0 +1,77 @@
+# KickStack Fly.io Configuration
+app = "kickstack-yourhandle"  # Replace with your unique app name
+primary_region = "sea"          # Choose your primary region
+
+# Build configuration
+[build]
+  dockerfile = "infra/fly/Dockerfile"
+
+# Environment variables (non-secrets)
+[env]
+  NODE_ENV = "production"
+  PGRST_DB_SCHEMA = "public"
+  PGRST_DB_ANON_ROLE = "anon"
+  GOTRUE_DB_DRIVER = "postgres"
+  GOTRUE_JWT_EXP = "3600"
+  GOTRUE_JWT_AUD = "authenticated"
+  GOTRUE_JWT_DEFAULT_GROUP_NAME = "authenticated"
+  FNGW_PORT = "8787"
+  
+  # Internal service ports
+  INTERNAL_POSTGREST_PORT = "3000"
+  INTERNAL_GOTRUE_PORT = "9999"
+  INTERNAL_FNGW_PORT = "8787"
+  INTERNAL_REALTIME_PORT = "8081"
+  INTERNAL_WEB_PORT = "3001"
+
+# HTTP service configuration
+[[services]]
+  protocol = "tcp"
+  internal_port = 80
+  processes = ["proxy"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["http", "tls"]
+
+# Process definitions
+[processes]
+  proxy = "/usr/local/bin/caddy run --config /etc/caddy/Caddyfile"
+  api = "/app/scripts/start-postgrest.sh"
+  auth = "/app/scripts/start-gotrue.sh"
+  fngw = "cd /app && node api/fngw/dist/server.js"
+  realtime = "cd /app && node api/realtime/dist/server.js"
+  web = "cd /app && node web/.next/standalone/server.js"
+
+# Health checks
+[[services.http_checks]]
+  interval = "30s"
+  timeout = "10s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+  protocol = "http"
+
+# Volume for MinIO data (if using self-hosted storage)
+[[mounts]]
+  source = "kickstack_data"
+  destination = "/data"
+  processes = ["minio"]
+
+# Optional: MinIO process (enable if using self-hosted storage)
+# [processes]
+#   minio = "minio server /data --console-address :9001"
+
+# Optional: Persistent storage volume
+[[volume]]
+  source = "kickstack_data"
+  destination = "/data"
+  size_gb = 10
+
+# Console command (for debugging)
+[console]
+  command = "/bin/bash"

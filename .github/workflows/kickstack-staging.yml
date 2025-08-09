@@ -1,0 +1,146 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Deployment reason'
+        required: false
+        default: 'Manual deployment'
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  STAGING_APP: ${{ secrets.STAGING_APP_NAME || 'kickstack-staging' }}
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Verify staging app exists
+        run: |
+          if ! flyctl apps list | grep -q "$STAGING_APP"; then
+            echo "❌ Staging app '$STAGING_APP' not found"
+            echo "Create it first with: flyctl apps create $STAGING_APP"
+            exit 1
+          fi
+          echo "✅ Staging app '$STAGING_APP' exists"
+
+      - name: Set staging app context
+        working-directory: infra/fly
+        run: |
+          # Create staging-specific fly.toml
+          sed "s/app = .*/app = \"$STAGING_APP\"/" fly.toml > fly.staging.toml
+          
+          # Add staging environment variables
+          cat >> fly.staging.toml << EOF
+          
+          [env]
+            ENVIRONMENT = "staging"
+            NODE_ENV = "production"
+            LOG_LEVEL = "debug"
+          
+          [[services.http_checks]]
+            interval = "30s"
+            timeout = "5s"
+            grace_period = "10s"
+            method = "GET"
+            path = "/health"
+            protocol = "http"
+            restart_limit = 3
+            
+          EOF
+
+      - name: Deploy to staging
+        working-directory: infra/fly
+        run: |
+          echo "🚀 Deploying KickStack to staging..."
+          flyctl deploy \
+            --config fly.staging.toml \
+            --build-arg ENVIRONMENT=staging \
+            --strategy immediate \
+            --wait-timeout 600
+          
+          echo "✅ Staging deployment complete"
+
+      - name: Run validation tests
+        run: |
+          echo "🔍 Running validation tests..."
+          
+          # Wait for app to be fully ready
+          sleep 30
+          
+          # Get app hostname
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.staging.toml | grep Hostname | awk '{print $2}')
+          
+          if [ -z "$HOSTNAME" ]; then
+            echo "❌ Could not get app hostname"
+            exit 1
+          fi
+          
+          echo "🌐 Testing staging at: https://$HOSTNAME"
+          
+          # Run validation script
+          chmod +x scripts/validate-deployment.sh
+          ./scripts/validate-deployment.sh "$HOSTNAME" || {
+            echo "❌ Validation tests failed"
+            echo "📋 Staging app logs:"
+            flyctl logs --config fly.staging.toml -a "$STAGING_APP" || true
+            exit 1
+          }
+          
+          echo "✅ All validation tests passed"
+
+      - name: Run RLS security tests
+        run: |
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.staging.toml | grep Hostname | awk '{print $2}')
+          
+          echo "🔐 Running RLS security tests..."
+          chmod +x scripts/test-rls.sh
+          ./scripts/test-rls.sh "$HOSTNAME" || {
+            echo "❌ RLS security tests failed"
+            exit 1
+          }
+          
+          echo "✅ RLS security tests passed"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.staging.toml | grep Hostname | awk '{print $2}')
+          STATUS=${{ job.status }}
+          
+          if [ "$STATUS" = "success" ]; then
+            echo "✅ **Staging Deployment Successful**"
+            echo ""
+            echo "🌐 **Staging Environment:**"
+            echo "- URL: https://$HOSTNAME"
+            echo "- API: https://$HOSTNAME/"
+            echo "- Auth: https://$HOSTNAME/auth/"
+            echo "- Functions: https://$HOSTNAME/fn/"
+            echo ""
+            echo "🔍 **Next Steps:**"
+            echo "1. Test your changes at https://$HOSTNAME"
+            echo "2. Run manual tests if needed"
+            echo "3. Create production deployment when ready"
+          else
+            echo "❌ **Staging Deployment Failed**"
+            echo ""
+            echo "🔧 **Troubleshooting:**"
+            echo "1. Check deployment logs above"
+            echo "2. View app logs: flyctl logs -a $STAGING_APP"
+            echo "3. Check app status: flyctl status -a $STAGING_APP"
+          fi

@@ -1,0 +1,265 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Deployment reason (required)'
+        required: true
+      confirm:
+        description: 'Type "DEPLOY" to confirm production deployment'
+        required: true
+      run_migration:
+        description: 'Run database migration?'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+  PRODUCTION_APP: ${{ secrets.PRODUCTION_APP_NAME || 'kickstack-production' }}
+
+jobs:
+  validate-inputs:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "❌ Invalid confirmation. Must type exactly 'DEPLOY'"
+            exit 1
+          fi
+          echo "✅ Deployment confirmed"
+
+      - name: Validate reason
+        run: |
+          if [ -z "${{ github.event.inputs.reason }}" ]; then
+            echo "❌ Deployment reason is required"
+            exit 1
+          fi
+          echo "✅ Deployment reason: ${{ github.event.inputs.reason }}"
+
+  pre-deployment-checks:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Verify production app exists
+        run: |
+          if ! flyctl apps list | grep -q "$PRODUCTION_APP"; then
+            echo "❌ Production app '$PRODUCTION_APP' not found"
+            echo "Create it first with: flyctl apps create $PRODUCTION_APP"
+            exit 1
+          fi
+          echo "✅ Production app '$PRODUCTION_APP' exists"
+
+      - name: Check staging deployment
+        run: |
+          # Optional: verify staging is healthy before prod deployment
+          STAGING_APP="${{ secrets.STAGING_APP_NAME || 'kickstack-staging' }}"
+          if flyctl apps list | grep -q "$STAGING_APP"; then
+            echo "🔍 Checking staging health..."
+            STAGING_STATUS=$(flyctl status -a "$STAGING_APP" --json | jq -r '.Status')
+            if [ "$STAGING_STATUS" != "running" ]; then
+              echo "⚠️  Staging app status: $STAGING_STATUS (proceeding anyway)"
+            else
+              echo "✅ Staging app is healthy"
+            fi
+          else
+            echo "⚠️  No staging app found (proceeding anyway)"
+          fi
+
+      - name: Backup current production
+        run: |
+          echo "📋 Current production status:"
+          flyctl status -a "$PRODUCTION_APP" || echo "❌ Could not get production status"
+          
+          # Save current release info for potential rollback
+          mkdir -p /tmp/backup
+          flyctl releases -a "$PRODUCTION_APP" --json > /tmp/backup/releases.json || true
+          
+          echo "💾 Production backup info saved"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate-inputs, pre-deployment-checks]
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create production deployment record
+        run: |
+          echo "📋 **Production Deployment**"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Commit:** ${{ github.sha }}"
+          echo "- **Migration:** ${{ github.event.inputs.run_migration }}"
+          echo "- **Timestamp:** $(date -u)"
+
+      - name: Run database migration
+        if: github.event.inputs.run_migration == 'true'
+        working-directory: infra/fly
+        run: |
+          echo "🔄 Running database migration..."
+          
+          # Scale to ensure one instance for migration
+          flyctl scale count 1 -a "$PRODUCTION_APP"
+          
+          # Run migration command (adjust based on your migration system)
+          flyctl ssh console -a "$PRODUCTION_APP" -C "cd /app && npm run migrate" || {
+            echo "❌ Migration failed"
+            exit 1
+          }
+          
+          echo "✅ Migration completed"
+
+      - name: Deploy to production
+        working-directory: infra/fly
+        run: |
+          echo "🚀 Deploying KickStack to production..."
+          
+          # Create production-specific fly.toml
+          sed "s/app = .*/app = \"$PRODUCTION_APP\"/" fly.toml > fly.production.toml
+          
+          # Add production environment variables
+          cat >> fly.production.toml << EOF
+          
+          [env]
+            ENVIRONMENT = "production"
+            NODE_ENV = "production"
+            LOG_LEVEL = "info"
+          
+          # Production health checks - more conservative
+          [[services.http_checks]]
+            interval = "15s"
+            timeout = "10s"
+            grace_period = "30s"
+            method = "GET"
+            path = "/health"
+            protocol = "http"
+            restart_limit = 5
+            
+          EOF
+          
+          # Deploy with rolling strategy for zero downtime
+          flyctl deploy \
+            --config fly.production.toml \
+            --build-arg ENVIRONMENT=production \
+            --strategy rolling \
+            --wait-timeout 900
+          
+          echo "✅ Production deployment complete"
+
+      - name: Post-deployment validation
+        run: |
+          echo "🔍 Running post-deployment validation..."
+          
+          # Wait for deployment to stabilize
+          sleep 60
+          
+          # Get production hostname
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.production.toml | grep Hostname | awk '{print $2}')
+          
+          if [ -z "$HOSTNAME" ]; then
+            echo "❌ Could not get production hostname"
+            exit 1
+          fi
+          
+          echo "🌐 Validating production at: https://$HOSTNAME"
+          
+          # Run comprehensive validation
+          chmod +x scripts/validate-deployment.sh
+          ./scripts/validate-deployment.sh "$HOSTNAME" || {
+            echo "❌ Production validation failed"
+            echo "🚨 **PRODUCTION DEPLOYMENT FAILED**"
+            echo "📋 Production logs:"
+            flyctl logs --config fly.production.toml -a "$PRODUCTION_APP" || true
+            echo ""
+            echo "🔄 Consider rolling back immediately"
+            exit 1
+          }
+          
+          echo "✅ Production validation passed"
+
+      - name: Run security validation
+        run: |
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.production.toml | grep Hostname | awk '{print $2}')
+          
+          echo "🔐 Running production security validation..."
+          chmod +x scripts/test-rls.sh
+          ./scripts/test-rls.sh "$HOSTNAME" || {
+            echo "❌ Production security validation failed"
+            echo "🚨 **SECURITY ISSUE DETECTED**"
+            exit 1
+          }
+          
+          echo "✅ Production security validation passed"
+
+      - name: Deployment success notification
+        if: success()
+        run: |
+          cd infra/fly
+          HOSTNAME=$(flyctl info --config fly.production.toml | grep Hostname | awk '{print $2}')
+          
+          echo "🎉 **Production Deployment Successful!**"
+          echo ""
+          echo "📋 **Deployment Summary:**"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Commit:** ${{ github.sha }}"
+          echo "- **Migration:** ${{ github.event.inputs.run_migration }}"
+          echo "- **Completed:** $(date -u)"
+          echo ""
+          echo "🌐 **Production Environment:**"
+          echo "- **URL:** https://$HOSTNAME"
+          echo "- **API:** https://$HOSTNAME/"
+          echo "- **Auth:** https://$HOSTNAME/auth/"
+          echo "- **Functions:** https://$HOSTNAME/fn/"
+          echo ""
+          echo "🔍 **Post-deployment checklist:**"
+          echo "- [x] Deployment completed successfully"
+          echo "- [x] Health checks passed"
+          echo "- [x] Security validation passed"
+          echo "- [ ] Monitor application metrics"
+          echo "- [ ] Verify user-facing functionality"
+
+      - name: Deployment failure notification
+        if: failure()
+        run: |
+          echo "🚨 **Production Deployment Failed!**"
+          echo ""
+          echo "📋 **Deployment Details:**"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Commit:** ${{ github.sha }}"
+          echo "- **Failed at:** $(date -u)"
+          echo ""
+          echo "🔧 **Immediate Actions:**"
+          echo "1. **Check logs:** flyctl logs -a $PRODUCTION_APP"
+          echo "2. **Check status:** flyctl status -a $PRODUCTION_APP"
+          echo "3. **Consider rollback:** Use rollback workflow if needed"
+          echo ""
+          echo "🆘 **Emergency Contacts:**"
+          echo "- Check team communication channels"
+          echo "- Review deployment logs above"
+          echo "- Escalate if service is down"

@@ -1,0 +1,287 @@
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - 'staging'
+          - 'production'
+      reason:
+        description: 'Rollback reason (required)'
+        required: true
+      confirm:
+        description: 'Type "ROLLBACK" to confirm'
+        required: true
+      release_version:
+        description: 'Specific release version to rollback to (optional)'
+        required: false
+
+env:
+  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    
+    outputs:
+      app-name: ${{ steps.set-app.outputs.app-name }}
+    
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "ROLLBACK" ]; then
+            echo "❌ Invalid confirmation. Must type exactly 'ROLLBACK'"
+            exit 1
+          fi
+          echo "✅ Rollback confirmed"
+
+      - name: Validate reason
+        run: |
+          if [ -z "${{ github.event.inputs.reason }}" ]; then
+            echo "❌ Rollback reason is required"
+            exit 1
+          fi
+          echo "✅ Rollback reason: ${{ github.event.inputs.reason }}"
+
+      - name: Set app name
+        id: set-app
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            APP_NAME="${{ secrets.PRODUCTION_APP_NAME || 'kickstack-production' }}"
+          else
+            APP_NAME="${{ secrets.STAGING_APP_NAME || 'kickstack-staging' }}"
+          fi
+          echo "app-name=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "🎯 Target app: $APP_NAME"
+
+  emergency-rollback:
+    name: Execute Rollback
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create rollback record
+        run: |
+          echo "🚨 **EMERGENCY ROLLBACK INITIATED**"
+          echo ""
+          echo "📋 **Rollback Details:**"
+          echo "- **Environment:** ${{ github.event.inputs.environment }}"
+          echo "- **App:** ${{ needs.validate-rollback.outputs.app-name }}"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Target Version:** ${{ github.event.inputs.release_version || 'Previous stable' }}"
+          echo "- **Timestamp:** $(date -u)"
+
+      - name: Get current app status
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          echo "📊 Current app status:"
+          flyctl status -a "$APP_NAME" || echo "❌ Could not get current status"
+          
+          echo ""
+          echo "📋 Recent releases:"
+          flyctl releases -a "$APP_NAME" | head -10 || echo "❌ Could not get releases"
+
+      - name: Identify rollback target
+        id: rollback-target
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          
+          if [ -n "${{ github.event.inputs.release_version }}" ]; then
+            TARGET_VERSION="${{ github.event.inputs.release_version }}"
+            echo "🎯 Using specified version: $TARGET_VERSION"
+          else
+            # Get the previous stable release (second in the list)
+            TARGET_VERSION=$(flyctl releases -a "$APP_NAME" --json | jq -r '.[1].Version' 2>/dev/null)
+            if [ "$TARGET_VERSION" = "null" ] || [ -z "$TARGET_VERSION" ]; then
+              echo "❌ Could not identify previous release"
+              echo "Available releases:"
+              flyctl releases -a "$APP_NAME" || true
+              exit 1
+            fi
+            echo "🎯 Using previous release: $TARGET_VERSION"
+          fi
+          
+          echo "target-version=$TARGET_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Rollback target identified: $TARGET_VERSION"
+
+      - name: Execute rollback
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          TARGET_VERSION="${{ steps.rollback-target.outputs.target-version }}"
+          
+          echo "🔄 Rolling back to version $TARGET_VERSION..."
+          
+          # Perform the rollback
+          flyctl releases rollback "$TARGET_VERSION" -a "$APP_NAME" --force || {
+            echo "❌ Rollback command failed"
+            echo ""
+            echo "🔧 Manual rollback steps:"
+            echo "1. flyctl releases -a $APP_NAME"
+            echo "2. flyctl releases rollback VERSION -a $APP_NAME --force"
+            echo "3. flyctl status -a $APP_NAME"
+            exit 1
+          }
+          
+          echo "✅ Rollback command executed"
+
+      - name: Wait for rollback to complete
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          echo "⏳ Waiting for rollback to complete..."
+          
+          # Wait for deployment to stabilize
+          sleep 60
+          
+          echo "📊 Post-rollback status:"
+          flyctl status -a "$APP_NAME" || echo "❌ Could not get status"
+
+      - name: Validate rollback success
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          
+          # Get app hostname for testing
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            CONFIG_FILE="fly.production.toml"
+          else
+            CONFIG_FILE="fly.staging.toml"
+          fi
+          
+          cd infra/fly
+          
+          # Try to get hostname from flyctl info
+          HOSTNAME=$(flyctl info -a "$APP_NAME" | grep Hostname | awk '{print $2}' 2>/dev/null)
+          
+          if [ -z "$HOSTNAME" ]; then
+            echo "⚠️  Could not get hostname for validation, checking app status instead"
+            flyctl status -a "$APP_NAME"
+            return
+          fi
+          
+          echo "🔍 Validating rollback at: https://$HOSTNAME"
+          
+          # Basic health check
+          sleep 30
+          
+          if curl -f "https://$HOSTNAME/health" >/dev/null 2>&1; then
+            echo "✅ Health check passed"
+          else
+            echo "❌ Health check failed"
+            echo "🔧 App may still be starting up, check manually:"
+            echo "   curl -f https://$HOSTNAME/health"
+            exit 1
+          fi
+          
+          # Basic API check
+          if curl -f "https://$HOSTNAME/" -H "Accept: application/json" >/dev/null 2>&1; then
+            echo "✅ API check passed"
+          else
+            echo "❌ API check failed"
+            exit 1
+          fi
+
+      - name: Rollback success notification
+        if: success()
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          TARGET_VERSION="${{ steps.rollback-target.outputs.target-version }}"
+          
+          echo "✅ **ROLLBACK COMPLETED SUCCESSFULLY**"
+          echo ""
+          echo "📋 **Rollback Summary:**"
+          echo "- **Environment:** ${{ github.event.inputs.environment }}"
+          echo "- **App:** $APP_NAME"
+          echo "- **Rolled back to:** $TARGET_VERSION"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Completed:** $(date -u)"
+          echo ""
+          echo "🔍 **Post-rollback actions:**"
+          echo "- [x] Rollback completed"
+          echo "- [x] Basic health checks passed"
+          echo "- [ ] Verify user-facing functionality"
+          echo "- [ ] Monitor application metrics"
+          echo "- [ ] Investigate root cause of issue"
+          echo "- [ ] Plan fix for rolled-back issue"
+          echo ""
+          echo "📊 **Current status:**"
+          flyctl status -a "$APP_NAME" || true
+
+      - name: Rollback failure notification
+        if: failure()
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          
+          echo "🚨 **ROLLBACK FAILED**"
+          echo ""
+          echo "📋 **Rollback Details:**"
+          echo "- **Environment:** ${{ github.event.inputs.environment }}"
+          echo "- **App:** $APP_NAME"
+          echo "- **Initiated by:** ${{ github.actor }}"
+          echo "- **Reason:** ${{ github.event.inputs.reason }}"
+          echo "- **Failed at:** $(date -u)"
+          echo ""
+          echo "🆘 **IMMEDIATE MANUAL ACTION REQUIRED:**"
+          echo ""
+          echo "1. **Check app status:**"
+          echo "   flyctl status -a $APP_NAME"
+          echo ""
+          echo "2. **Check available releases:**"
+          echo "   flyctl releases -a $APP_NAME"
+          echo ""
+          echo "3. **Manual rollback:**"
+          echo "   flyctl releases rollback VERSION -a $APP_NAME --force"
+          echo ""
+          echo "4. **Check logs for issues:**"
+          echo "   flyctl logs -a $APP_NAME"
+          echo ""
+          echo "5. **Emergency contact:**"
+          echo "   - Escalate to team leads immediately"
+          echo "   - Consider maintenance mode if service is down"
+          echo ""
+          echo "📊 **Current app status:**"
+          flyctl status -a "$APP_NAME" || echo "❌ Could not retrieve status"
+
+  post-rollback-analysis:
+    name: Post-Rollback Analysis
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, emergency-rollback]
+    if: always() && needs.emergency-rollback.result == 'success'
+    
+    steps:
+      - name: Generate rollback report
+        run: |
+          APP_NAME="${{ needs.validate-rollback.outputs.app-name }}"
+          
+          echo "📊 **POST-ROLLBACK ANALYSIS**"
+          echo ""
+          echo "📋 **Rollback completed successfully for:**"
+          echo "- Environment: ${{ github.event.inputs.environment }}"
+          echo "- App: $APP_NAME"
+          echo "- Version: ${{ steps.rollback-target.outputs.target-version }}"
+          echo ""
+          echo "📝 **Recommended next steps:**"
+          echo "1. **Monitor the application** for the next 2-4 hours"
+          echo "2. **Verify all critical functionality** is working"
+          echo "3. **Investigate the root cause** that required rollback"
+          echo "4. **Document the incident** and lessons learned"
+          echo "5. **Plan and test a proper fix** before next deployment"
+          echo "6. **Review deployment process** to prevent similar issues"
+          echo ""
+          echo "🔍 **Investigation checklist:**"
+          echo "- [ ] What specific issue triggered the rollback?"
+          echo "- [ ] Was the issue caught in testing/staging?"
+          echo "- [ ] What monitoring/alerting improvements are needed?"
+          echo "- [ ] How can we prevent this in the future?"

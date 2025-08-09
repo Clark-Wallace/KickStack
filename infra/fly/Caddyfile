@@ -1,0 +1,75 @@
+# KickStack Caddy Reverse Proxy Configuration for Fly.io
+{
+	# Enable access logs
+	log {
+		output stdout
+		format console
+	}
+	
+	# Auto HTTPS
+	auto_https on
+}
+
+# Main application routes
+:80 {
+	# Health check endpoint
+	handle /health {
+		respond "OK" 200
+	}
+
+	# Authentication routes (GoTrue)
+	handle /auth* {
+		reverse_proxy localhost:9999
+	}
+
+	# Edge Functions routes
+	handle /fn* {
+		reverse_proxy localhost:8787
+	}
+
+	# Realtime WebSocket
+	handle /realtime {
+		reverse_proxy localhost:8081
+	}
+
+	# Web Dashboard
+	handle /dashboard* {
+		reverse_proxy localhost:3001
+	}
+
+	# Static assets for web app
+	handle /static* {
+		reverse_proxy localhost:3001
+	}
+
+	# Next.js API routes
+	handle /api* {
+		reverse_proxy localhost:3001
+	}
+
+	# Main API routes (PostgREST) - catch-all for database tables
+	handle /* {
+		# Add CORS headers for API
+		@cors {
+			header Access-Control-Request-Method *
+		}
+		header @cors Access-Control-Allow-Origin "*"
+		header @cors Access-Control-Allow-Methods "GET, POST, PATCH, DELETE, OPTIONS"
+		header @cors Access-Control-Allow-Headers "Authorization, Content-Type"
+		header @cors Access-Control-Max-Age "86400"
+
+		# Handle OPTIONS requests for CORS preflight
+		@options {
+			method OPTIONS
+		}
+		respond @options 204
+
+		# Proxy to PostgREST
+		reverse_proxy localhost:3000
+	}
+
+	# Error handling
+	handle_errors {
+		respond "Service temporarily unavailable" 503
+	}
+}
